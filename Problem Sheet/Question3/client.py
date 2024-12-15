@@ -1,26 +1,25 @@
+# client.py
 import socket
 
-HOST = 'localhost'
-PORT = 12345
+SERVER_HOST = 'localhost'
+SERVER_PORT = 5004
+FILE_PATH = 'C:\DEC Lab\File.txt'
 
-def main():
+def upload_file():
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
-            client.connect((HOST, PORT))
-            print("Connected to the server.")
+        client_socket.connect((SERVER_HOST, SERVER_PORT))
+    except Exception as error:
+        print(f"Connection failed: {error}")
+        return
 
-            while True:
-                server_message = client.recv(1024).decode()
-                print(server_message.strip())
-                if server_message.startswith('Your move'):
-                    move = input("Enter your move (row,col): ")
-                    client.sendall(move.encode())
-                elif server_message in ['WIN', 'LOSE', 'DRAW']:
-                    print(f"Game over: {server_message}")
-                    break
-    except Exception as e:
-        print(f"Error: {e}")
+    try:
+        client_socket.send(FILE_PATH.encode())
+        server_response = client_socket.recv(1024)
+        print(server_response.decode())
+    except Exception as error:
+        print(f"Error during upload: {error}")
+    finally:
+        client_socket.close()
 
-
-if __name__ == '__main__':
-    main()
+upload_file()
