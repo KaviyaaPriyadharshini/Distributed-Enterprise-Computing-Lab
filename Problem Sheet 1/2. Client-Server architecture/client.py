@@ -3,7 +3,7 @@ import socket
 
 SERVER_HOST = 'localhost'
 SERVER_PORT = 5004
-FILE_PATH = '/path/to/your/file.txt'
+FILE_PATH = 'C:\DEC Lab\File.txt'
 
 def upload_file():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
