@@ -1,46 +1,45 @@
 import socket
 import threading
 
-# Define server host and port
-SERVER_HOST = '127.0.0.1'  # Replace with the server's IP address
-SERVER_PORT = 12345
-
-# Function to handle receiving messages from the server
 def receive_messages(client_socket):
     while True:
         try:
             message = client_socket.recv(1024).decode('utf-8')
-            print(message)
-        except:
-            print("Connection lost.")
+            if message:
+                print(message)
+            else:
+                print("[SERVER] Connection closed.")
+                break
+        except Exception as e:
+            print(f"[ERROR] An error occurred: {e}")
+            break
+
+def send_messages(client_socket):
+    while True:
+        message = input()
+        if message.lower() == 'exit':
+            print("[INFO] Disconnecting from the chat.")
             client_socket.close()
             break
+        client_socket.send(message.encode('utf-8'))
 
-# Main function to set up the client
-def main():
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+def start_client(host, port):
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        client.connect((SERVER_HOST, SERVER_PORT))
-    except:
-        print("Unable to connect to the server.")
+        client_socket.connect((host, port))
+        print("[INFO] Connected to the server.")
+    except Exception as e:
+        print(f"[ERROR] Could not connect to server: {e}")
         return
 
-    print("Connected to the chat server.")
+    # Set username
     username = input("Enter your username: ")
-    client.send(username.encode('utf-8'))
+    client_socket.send(username.encode('utf-8'))
 
-    # Start a thread to listen for incoming messages
-    thread = threading.Thread(target=receive_messages, args=(client,))
-    thread.start()
-
-    # Main loop to send messages
-    while True:
-        message = input("")
-        if message.lower() == 'exit':
-            client.close()
-            break
-        else:
-            client.send(f"{username}: {message}".encode('utf-8'))
+    threading.Thread(target=receive_messages, args=(client_socket,)).start()
+    send_messages(client_socket)
 
 if __name__ == "__main__":
-    main()
+    host = input("Enter server IP address: ")
+    port = 1026
+    start_client(host, port)
