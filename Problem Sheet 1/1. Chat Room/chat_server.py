@@ -1,54 +1,57 @@
 import socket
 import threading
 
-# Define server host and port
-HOST = '0.0.0.0'  # Allow connections from all IPs
-PORT = 12345
+clients = {}
+clients_lock = threading.Lock()
 
-# List to store connected client sockets
-clients = []
+def handle_client(client_socket, addr):
+    print(f"[NEW CONNECTION] {addr} connected.")
+    client_socket.send("Welcome to the chat room!".encode('utf-8'))
+    
+    username = client_socket.recv(1024).decode('utf-8')
+    with clients_lock:
+        clients[client_socket] = username
+    print(f"[USERNAME SET] {username} has joined the chat.")
 
-# Broadcast message to all clients
-def broadcast(message, sender_socket):
-    for client in clients:
-        if client != sender_socket:  # Do not send the message back to the sender
-            try:
-                client.send(message)
-            except:
-                # If the client is no longer reachable, remove it
-                client.close()
-                clients.remove(client)
+    broadcast(f"[{username}] has joined the chat!", client_socket)
 
-# Handle communication with a single client
-def handle_client(client_socket):
     while True:
         try:
-            # Receive message from client
-            message = client_socket.recv(1024)
+            message = client_socket.recv(1024).decode('utf-8')
             if message:
-                print(f"Received: {message.decode('utf-8')}")
-                broadcast(message, client_socket)
-        except:
-            # Remove client on disconnect or error
-            print("A client disconnected.")
-            clients.remove(client_socket)
-            client_socket.close()
+                print(f"[{username}] {message}")
+                broadcast(f"[{username}] {message}", client_socket)
+            else:
+                break
+        except Exception as e:
+            print(f"[ERROR] {username} disconnected unexpectedly: {e}")
             break
 
-# Main function to set up the server
-def main():
+    with clients_lock:
+        del clients[client_socket]
+    print(f"[DISCONNECTED] {username} disconnected.")
+    broadcast(f"[{username}] has left the chat.", client_socket)
+    client_socket.close()
+
+def broadcast(message, sender_socket):
+    with clients_lock:
+        for client in clients:
+            if client != sender_socket:
+                try:
+                    client.send(message.encode('utf-8'))
+                except Exception as e:
+                    print(f"[ERROR] Could not send message to a client: {e}")
+
+def start_server(host='0.0.0.0', port=1026):
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind((HOST, PORT))
-    server.listen(5)  # Maximum 5 clients in the queue
-    print(f"Server running on {HOST}:{PORT}...")
+    server.bind((host, port))
+    server.listen()
+
+    print(f"[STARTING SERVER] Server started on {host}:{port}")
 
     while True:
-        client_socket, client_address = server.accept()
-        print(f"New connection from {client_address}")
-        clients.append(client_socket)
-        # Start a new thread to handle this client
-        thread = threading.Thread(target=handle_client, args=(client_socket,))
-        thread.start()
+        client_socket, addr = server.accept()
+        threading.Thread(target=handle_client, args=(client_socket, addr)).start()
 
 if __name__ == "__main__":
-    main()
+    start_server()
