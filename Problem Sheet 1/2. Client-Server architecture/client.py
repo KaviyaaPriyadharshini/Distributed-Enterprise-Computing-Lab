@@ -1,25 +1,28 @@
-# client.py
 import socket
 
-SERVER_HOST = 'localhost'
-SERVER_PORT = 5004
-FILE_PATH = 'C:\DEC Lab\File.txt'
+def upload_file(file_path):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect(('127.0.0.1', 2000))
+        request = f"UPLOAD {file_path}"
+        s.send(request.encode())
+        response = s.recv(1024).decode()
+        print("Server response:", response)
+        return response.split()[1]  
+    
+def download_file(file_id):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect(('127.0.0.1', 2000))
+        request = f"DOWNLOAD {file_id}"
+        s.send(request.encode())
+        response = s.recv(1024)
 
-def upload_file():
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        client_socket.connect((SERVER_HOST, SERVER_PORT))
-    except Exception as error:
-        print(f"Connection failed: {error}")
-        return
+        if response.startswith(b"ERROR"):
+            print(response.decode())
+        else:
+            with open(f'downloaded_{file_id}.bin', 'wb') as f:
+                f.write(response)
+            print(f"File downloaded as downloaded_{file_id}.bin")
 
-    try:
-        client_socket.send(FILE_PATH.encode())
-        server_response = client_socket.recv(1024)
-        print(server_response.decode())
-    except Exception as error:
-        print(f"Error during upload: {error}")
-    finally:
-        client_socket.close()
-
-upload_file()
+if __name__ == "__main__":
+    file_id = upload_file('/home/cslinux/Desktop/file.txt')
+    download_file(file_id)  
