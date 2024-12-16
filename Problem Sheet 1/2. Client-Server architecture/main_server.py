@@ -1,72 +1,61 @@
-# server.py
 import socket
 import os
-import threading
+import uuid
 
-MAIN_SERVER_HOST = 'localhost'
-MAIN_SERVER_PORT = 5004
-STORAGE_SERVERS = [('localhost', 5001), ('localhost', 5002)]
-FRAGMENT_BUFFER = 1024
+# Simulate storage servers using a dictionary
+storage_servers = {}
 
-def process_storage_connection(conn):
-    while True:
-        data = conn.recv(FRAGMENT_BUFFER)
-        if not data:
-            break
-        with open('storage_log.txt', 'ab') as storage_file:
-            storage_file.write(data)
-    conn.close()
+def split_file(file_path):
+    with open(file_path, 'rb') as f:
+        data = f.read()
+        fragment_size = len(data) // 2
+        return data[:fragment_size], data[fragment_size:]
 
-def initialize_storage_server(port):
-    storage_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    storage_socket.bind(('localhost', port))
-    storage_socket.listen(5)
-    print(f'Storage server active on port {port}...')
-    while True:
-        conn, addr = storage_socket.accept()
-        print(f'Connected to {addr}')
-        process_storage_connection(conn)
+def handle_client_connection(client_socket):
+    request = client_socket.recv(1024).decode()
+    command, *args = request.split()
 
-def main_server():
+    if command == "UPLOAD":
+        file_path = args[0]
+        if os.path.exists(file_path):
+            fragment1, fragment2 = split_file(file_path)
+            file_id = str(uuid.uuid4())
+            
+            storage_servers[f"{file_id}_1"] = fragment1
+            storage_servers[f"{file_id}_2"] = fragment2
+            
+            response = f"FILE_ID {file_id} FRAGMENTS {file_id}_1 {file_id}_2"
+            client_socket.send(response.encode())
+        else:
+            client_socket.send("ERROR File not found".encode())
+
+    elif command == "DOWNLOAD":
+        file_id = args[0]
+        fragments = [f"{file_id}_1", f"{file_id}_2"]
+        full_file = b''
+
+        for fragment in fragments:
+            if fragment in storage_servers:
+                full_file += storage_servers[fragment]
+            else:
+                client_socket.send("ERROR Fragment not found".encode())
+                client_socket.close()
+                return
+
+        client_socket.send(full_file)
+
+    client_socket.close()
+
+def start_server(host='127.0.0.1', port=2000):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((MAIN_SERVER_HOST, MAIN_SERVER_PORT))
+    server_socket.bind((host, port))
     server_socket.listen(5)
-    print('Main server operational...')
 
+    print(f"Server listening on {host}:{port}")
     while True:
-        client_conn, client_addr = server_socket.accept()
-        print(f'Client linked from {client_addr}')
-        
-        file_location = client_conn.recv(FRAGMENT_BUFFER).decode()
-        if not os.path.exists(file_location):
-            client_conn.send(b'Error: File not available.')
-            client_conn.close()
-            continue
+        client_socket, addr = server_socket.accept()
+        print(f"Connection from {addr}")
+        handle_client_connection(client_socket)
 
-        segment_index = 0
-        with open(file_location, 'rb') as file_segment:
-            while True:
-                fragment = file_segment.read(FRAGMENT_BUFFER)
-                if not fragment:
-                    break
-
-                server_index = segment_index % len(STORAGE_SERVERS)
-                target_host, target_port = STORAGE_SERVERS[server_index]
-
-                try:
-                    storage_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    storage_conn.connect((target_host, target_port))
-                    storage_conn.sendall(fragment)
-                    storage_conn.close()
-                except Exception as error:
-                    print(f"Transmission error to {target_host}:{target_port} - {error}")
-
-                segment_index += 1
-
-        client_conn.send(b'Upload finalized.')
-        client_conn.close()
-
-for port in range(5001, 5003):
-    threading.Thread(target=initialize_storage_server, args=(port,), daemon=True).start()
-
-main_server()
+if __name__ == "__main__":
+    start_server()
